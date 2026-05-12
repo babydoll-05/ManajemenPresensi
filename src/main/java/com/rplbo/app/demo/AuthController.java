@@ -1,6 +1,5 @@
 package com.rplbo.app.demo;
 
-import com.presensi.dao.UserDAO; // Sesuaikan jika package UserDAO kamu berbeda
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
@@ -31,40 +30,32 @@ public class AuthController {
             return;
         }
 
-        // Cek ke database
-        String role = userDAO.authenticateUser(username, password);
+        String[] result = userDAO.authenticateUserFull(username, password);
 
-        if (role != null) {
+        if (result != null) {
             lblError.setVisible(false);
-
-            // Pindah halaman jika rolenya karyawan atau admin
-            if (role.equals("karyawan") || role.equals("admin")) {
-                loadKaryawanDashboard(event, username); // Mengirim username
-            }
+            String role = result[0];
+            int idKaryawan = Integer.parseInt(result[1]);
+            loadDashboard(event, username, role, idKaryawan);
         } else {
             lblError.setText("Username atau password salah!");
             lblError.setVisible(true);
         }
     }
 
-    // Method untuk memuat Dashboard dan mengirim data Username
-    private void loadKaryawanDashboard(ActionEvent event, String username) {
+    private void loadDashboard(ActionEvent event, String username, String role, int idKaryawan) {
         try {
             FXMLLoader loader = new FXMLLoader(getClass().getResource("/com/rplbo/app/demo/dashboard-karyawan-view.fxml"));
             Parent root = loader.load();
 
-            // MENGIRIM DATA: Mengambil controller Dashboard dan mengirim username
-            DashboardController dashboardController = loader.getController();
-            dashboardController.setNamaPengguna(username);
+            DashboardController dc = loader.getController();
+            dc.setNamaPengguna(username, role, idKaryawan);
 
-            // Mengganti jendela
             Stage stage = (Stage) ((Node) event.getSource()).getScene().getWindow();
-            Scene scene = new Scene(root, 900, 600);
-            stage.setTitle("Aplikasi Manajemen Presensi - Dashboard Karyawan");
-            stage.setScene(scene);
+            stage.setScene(new Scene(root, 900, 600));
+            stage.setTitle("Aplikasi Manajemen Presensi - Dashboard");
             stage.show();
         } catch (Exception e) {
-            System.out.println("GAGAL MEMUAT DASHBOARD: " + e.getMessage());
             e.printStackTrace();
         }
     }
