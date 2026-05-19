@@ -8,7 +8,7 @@ public class TestConnection {
         System.out.println("Mencoba menghubungkan ke database...");
 
         try {
-            Connection conn = com.presensi.dao.DatabaseConnection.getConnection();
+            Connection conn = com.rplbo.app.demo.DatabaseConnection.getConnection();
             if (conn != null) {
                 System.out.println("BERHASIL! Java sudah terhubung dengan database mahasiswa_presensi.");
             }

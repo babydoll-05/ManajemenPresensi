@@ -8,7 +8,6 @@ import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.fxml.Initializable;
 import javafx.scene.Node;
-import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
@@ -18,6 +17,11 @@ import javafx.util.Duration;
 import java.io.IOException;
 import java.net.URL;
 import java.sql.*;
+
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -27,140 +31,332 @@ import java.util.ResourceBundle;
 
 public class PresensiController implements Initializable {
 
-    @FXML private Label lblJamDigital;
-    @FXML private Label lblTanggal;
-    @FXML private Label lblJamMasuk;
-    @FXML private Label lblJamKeluar;
-    @FXML private Label lblStatusMasuk;
-    @FXML private Label lblStatusKeluar;
-    @FXML private Button btnPresensi;
+    @FXML
+    private Label lblJamDigital;
 
-    private int idKaryawan;
-    private String username;
-    private String role;
-    private int idPresensi = -1;
+    @FXML
+    private Label lblTanggal;
 
-    private static final DateTimeFormatter DTF = DateTimeFormatter.ofPattern("HH:mm:ss");
+    @FXML
+    private Label lblJamMasuk;
+
+    @FXML
+    private Label lblJamKeluar;
+
+    @FXML
+    private Label lblStatusMasuk;
+
+    @FXML
+    private Label lblStatusKeluar;
+
+    @FXML
+    private Button btnPresensi;
+
+    private boolean isClockedIn = false;
 
     @Override
-    public void initialize(URL location, ResourceBundle resources) {
-        startClock();
-    }
+    public void initialize(URL location,
+                           ResourceBundle resources) {
 
-    public void setUserData(String username, String role, int idKaryawan) {
-        this.username = username;
-        this.role = role;
-        this.idKaryawan = idKaryawan;
+        startClock();
+
         loadPresensiHariIni();
     }
 
-    private void loadPresensiHariIni() {
-        String today = LocalDate.now().toString();
-        String query = "SELECT id_presensi, jam_masuk, jam_keluar FROM presensi WHERE id_karyawan = ? AND tanggal = ?";
-
-        try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(query)) {
-
-            stmt.setInt(1, idKaryawan);
-            stmt.setString(2, today);
-            ResultSet rs = stmt.executeQuery();
-
-            if (rs.next()) {
-                idPresensi = rs.getInt("id_presensi");
-                String jamMasuk = rs.getString("jam_masuk");
-                String jamKeluar = rs.getString("jam_keluar");
-
-                lblJamMasuk.setText(jamMasuk != null ? jamMasuk : "-- : -- : --");
-                lblStatusMasuk.setText(jamMasuk != null ? "Tepat Waktu" : "Belum Absen");
-
-                if (jamKeluar != null) {
-                    lblJamKeluar.setText(jamKeluar);
-                    lblStatusKeluar.setText("Selesai Shift");
-                    btnPresensi.setDisable(true);
-                    btnPresensi.setText("Presensi Hari Ini Selesai");
-                } else if (jamMasuk != null) {
-                    btnPresensi.setText("🚪 Clock-Out Sekarang");
-                    btnPresensi.setStyle("-fx-background-color: #D32F2F; -fx-background-radius: 30; -fx-text-fill: white;");
-                }
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
-    }
-
+    // JAM REALTIME
     private void startClock() {
-        Locale localeID = new Locale("id", "ID");
-        DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss");
-        DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("EEEE, dd MMMM yyyy", localeID);
 
-        Timeline clock = new Timeline(new KeyFrame(Duration.ZERO, e -> {
-            LocalDateTime now = LocalDateTime.now();
-            lblJamDigital.setText(now.format(timeFormatter));
-            lblTanggal.setText(now.format(dateFormatter));
-        }), new KeyFrame(Duration.seconds(1)));
-        clock.setCycleCount(Animation.INDEFINITE);
+        Locale localeID =
+                new Locale("id", "ID");
+
+        DateTimeFormatter timeFormatter =
+                DateTimeFormatter.ofPattern("HH:mm:ss");
+
+        DateTimeFormatter dateFormatter =
+                DateTimeFormatter.ofPattern(
+                        "EEEE, dd MMMM yyyy",
+                        localeID
+                );
+
+        Timeline clock = new Timeline(
+
+                new KeyFrame(Duration.ZERO, e -> {
+
+                    LocalDateTime now =
+                            LocalDateTime.now();
+
+                    lblJamDigital.setText(
+                            now.format(timeFormatter)
+                    );
+
+                    lblTanggal.setText(
+                            now.format(dateFormatter)
+                    );
+                }),
+
+                new KeyFrame(Duration.seconds(1))
+        );
+
+        clock.setCycleCount(
+                Animation.INDEFINITE
+        );
+
         clock.play();
     }
 
+    // HANDLE PRESENSI
     @FXML
-    private void handleBack(ActionEvent event) {
+    private void handlePresensi(ActionEvent event) {
+
+        LocalTime now = LocalTime.now();
+
+        DateTimeFormatter dtf =
+                DateTimeFormatter.ofPattern("HH:mm:ss");
+
+        // CLOCK IN
+        if (!isClockedIn) {
+
+            lblJamMasuk.setText(
+                    now.format(dtf)
+            );
+
+            lblStatusMasuk.setText(
+                    "Tepat Waktu"
+            );
+
+            btnPresensi.setText(
+                    "🚪 Clock-Out Sekarang"
+            );
+
+            btnPresensi.setStyle(
+                    "-fx-background-color: #D32F2F;" +
+                            "-fx-background-radius: 10;" +
+                            "-fx-text-fill: white;" +
+                            "-fx-font-size: 18px;"
+            );
+
+            simpanClockIn(now);
+
+            isClockedIn = true;
+
+            System.out.println(
+                    "User Clock-In: " + now
+            );
+        }
+
+        // CLOCK OUT
+        else {
+
+            lblJamKeluar.setText(
+                    now.format(dtf)
+            );
+
+            lblStatusKeluar.setText(
+                    "Selesai Shift"
+            );
+
+            btnPresensi.setDisable(true);
+
+            btnPresensi.setText(
+                    "Presensi Hari Ini Selesai"
+            );
+
+            simpanClockOut(now);
+
+            System.out.println(
+                    "User Clock-Out: " + now
+            );
+        }
+    }
+
+    // SIMPAN CLOCK IN
+    private void simpanClockIn(LocalTime jamMasuk) {
+
         try {
-            FXMLLoader loader = new FXMLLoader(getClass().getResource("/com/rplbo/app/demo/dashboard-karyawan-view.fxml"));
-            Parent root = loader.load();
 
-            DashboardController dc = loader.getController();
-            dc.setNamaPengguna(username, role, idKaryawan);
+            Connection conn =
+                    DatabaseConnection.getConnection();
 
-            Stage stage = (Stage) ((Node) event.getSource()).getScene().getWindow();
-            stage.setScene(new Scene(root, 900, 600));
-            stage.setTitle("Aplikasi Manajemen Presensi - Dashboard");
-            stage.show();
-        } catch (IOException e) {
+            String sql =
+                    "INSERT INTO tb_presensi " +
+                            "(tanggal, jam_masuk, status) " +
+                            "VALUES (?, ?, ?)";
+
+            PreparedStatement pst =
+                    conn.prepareStatement(sql);
+
+            pst.setDate(
+                    1,
+                    java.sql.Date.valueOf(
+                            LocalDate.now()
+                    )
+            );
+
+            pst.setTime(
+                    2,
+                    java.sql.Time.valueOf(
+                            jamMasuk
+                    )
+            );
+
+            pst.setString(
+                    3,
+                    "Tepat Waktu"
+            );
+
+            pst.executeUpdate();
+
+            pst.close();
+            conn.close();
+
+        } catch (Exception e) {
+
             e.printStackTrace();
         }
     }
 
-    @FXML
-    private void handlePresensi(ActionEvent event) {
-        LocalTime now = LocalTime.now();
-        String today = LocalDate.now().toString();
+    // SIMPAN CLOCK OUT
+    private void simpanClockOut(LocalTime jamKeluar) {
 
-        if (idPresensi == -1) {
-            String sql = "INSERT INTO presensi (id_karyawan, tanggal, jam_masuk, status_kehadiran, status_waktu) VALUES (?, ?, ?, 'hadir', 'tepat_waktu')";
-            try (Connection conn = DatabaseConnection.getConnection();
-                 PreparedStatement stmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+        try {
 
-                stmt.setInt(1, idKaryawan);
-                stmt.setString(2, today);
-                stmt.setString(3, now.format(DTF));
-                stmt.executeUpdate();
+            Connection conn =
+                    DatabaseConnection.getConnection();
 
-                ResultSet keys = stmt.getGeneratedKeys();
-                if (keys.next()) idPresensi = keys.getInt(1);
+            String sql =
+                    "UPDATE tb_presensi " +
+                            "SET jam_keluar = ?, status = ? " +
+                            "WHERE tanggal = ?";
 
-                lblJamMasuk.setText(now.format(DTF));
-                lblStatusMasuk.setText("Tepat Waktu");
-                btnPresensi.setText("🚪 Clock-Out Sekarang");
-                btnPresensi.setStyle("-fx-background-color: #D32F2F; -fx-background-radius: 30; -fx-text-fill: white;");
-            } catch (SQLException e) {
-                e.printStackTrace();
-            }
-        } else {
-            String sql = "UPDATE presensi SET jam_keluar = ? WHERE id_presensi = ?";
-            try (Connection conn = DatabaseConnection.getConnection();
-                 PreparedStatement stmt = conn.prepareStatement(sql)) {
+            PreparedStatement pst =
+                    conn.prepareStatement(sql);
 
-                stmt.setString(1, now.format(DTF));
-                stmt.setInt(2, idPresensi);
-                stmt.executeUpdate();
+            pst.setTime(
+                    1,
+                    java.sql.Time.valueOf(
+                            jamKeluar
+                    )
+            );
 
-                lblJamKeluar.setText(now.format(DTF));
-                lblStatusKeluar.setText("Selesai Shift");
-                btnPresensi.setDisable(true);
-                btnPresensi.setText("Presensi Hari Ini Selesai");
-            } catch (SQLException e) {
-                e.printStackTrace();
-            }
+            pst.setString(
+                    2,
+                    "Selesai Shift"
+            );
+
+            pst.setDate(
+                    3,
+                    java.sql.Date.valueOf(
+                            LocalDate.now()
+                    )
+            );
+
+            pst.executeUpdate();
+
+            pst.close();
+            conn.close();
+
+        } catch (Exception e) {
+
+            e.printStackTrace();
         }
+    }
+
+    // LOAD DATA HARI INI
+    private void loadPresensiHariIni() {
+
+        try {
+
+            Connection conn =
+                    DatabaseConnection.getConnection();
+
+            String sql =
+                    "SELECT * FROM tb_presensi " +
+                            "WHERE tanggal = ?";
+
+            PreparedStatement pst =
+                    conn.prepareStatement(sql);
+
+            pst.setDate(
+                    1,
+                    java.sql.Date.valueOf(
+                            LocalDate.now()
+                    )
+            );
+
+            ResultSet rs =
+                    pst.executeQuery();
+
+            if (rs.next()) {
+
+                lblJamMasuk.setText(
+                        rs.getString("jam_masuk")
+                );
+
+                lblStatusMasuk.setText(
+                        rs.getString("status")
+                );
+
+                isClockedIn = true;
+
+                // SUDAH CLOCK OUT
+                if (rs.getString("jam_keluar") != null) {
+
+                    lblJamKeluar.setText(
+                            rs.getString("jam_keluar")
+                    );
+
+                    lblStatusKeluar.setText(
+                            "Selesai Shift"
+                    );
+
+                    btnPresensi.setDisable(true);
+
+                    btnPresensi.setText(
+                            "Presensi Hari Ini Selesai"
+                    );
+
+                } else {
+
+                    btnPresensi.setText(
+                            "🚪 Clock-Out Sekarang"
+                    );
+                }
+            }
+
+            rs.close();
+            pst.close();
+            conn.close();
+
+        } catch (Exception e) {
+
+            e.printStackTrace();
+        }
+    }
+
+    // KEMBALI DASHBOARD
+    @FXML
+    private void handleKembaliDashboard(ActionEvent event)
+            throws IOException {
+
+        FXMLLoader loader =
+                new FXMLLoader(
+                        getClass().getResource(
+                                "dashboard-karyawan-view.fxml"
+                        )
+                );
+
+        Scene scene =
+                new Scene(loader.load());
+
+        Stage stage =
+                (Stage)((Node)event.getSource())
+                        .getScene()
+                        .getWindow();
+
+        stage.setScene(scene);
+
+        stage.setTitle("Dashboard");
+
+        stage.show();
     }
 }

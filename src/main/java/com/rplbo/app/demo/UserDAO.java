@@ -1,4 +1,4 @@
-package com.rplbo.app.demo;
+package com.presensi.dao;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -7,23 +7,28 @@ import java.sql.SQLException;
 
 public class UserDAO {
 
-    public String[] authenticateUserFull(String username, String password) {
-        String query = "SELECT p.role, k.id_karyawan FROM pengguna p JOIN karyawan k ON p.id_karyawan = k.id_karyawan WHERE p.username = ? AND p.password = ?";
+    // Fungsi untuk memvalidasi login dan mengembalikan role pengguna
+    public String authenticateUser(String username, String password) {
+        // Asumsi kelas DatabaseConnection sudah dibuat untuk mengatur JDBC
+        String query = "SELECT role FROM tb_pengguna WHERE username = ? AND password = ?";
 
-        try (Connection conn = DatabaseConnection.getConnection();
+        try (Connection conn = com.rplbo.app.demo.DatabaseConnection.getConnection();
              PreparedStatement stmt = conn.prepareStatement(query)) {
 
             stmt.setString(1, username);
+            // Catatan: Sesuai proposal, password idealnya diverifikasi dengan BCrypt di tahap produksi
             stmt.setString(2, password);
 
             ResultSet rs = stmt.executeQuery();
+
             if (rs.next()) {
-                return new String[]{rs.getString("role"), String.valueOf(rs.getInt("id_karyawan"))};
+                return rs.getString("role"); // Mengembalikan 'admin' atau 'karyawan'
             }
 
         } catch (SQLException e) {
             e.printStackTrace();
         }
-        return null;
+
+        return null; // Login gagal
     }
 }
