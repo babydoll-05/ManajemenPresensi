@@ -16,6 +16,10 @@ import javafx.util.Duration;
 
 import java.io.IOException;
 import java.net.URL;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
@@ -23,306 +27,129 @@ import java.util.ResourceBundle;
 
 public class DashboardController implements Initializable {
 
-    // LABEL DASHBOARD
-    @FXML
-    private Label lblJam;
+    @FXML private Label lblJam;
+    @FXML private Label lblTanggal;
+    @FXML private Label lblNamaProfil;
+    @FXML private Label lblStatusDetail;
+    @FXML private Label lblHadir;
+    @FXML private Label lblTerlambat;
+    @FXML private Label lblCuti;
+    @FXML private Label lblIzin;
 
-    @FXML
-    private Label lblTanggal;
-
-    @FXML
-    private Label lblNamaProfil;
-
-    @FXML
-    private Label lblStatusDetail;
-
-    @FXML
-    private Label lblHadir;
-
-    @FXML
-    private Label lblTerlambat;
-
-    @FXML
-    private Label lblCuti;
-
-    @FXML
-    private Label lblIzin;
+    // KITA SAMAKAN SEMUA MENJADI AMELIA (ID = 2)
+    private final int ID_KARYAWAN_LOGIN = 2;
 
     @Override
-    public void initialize(URL location,
-                           ResourceBundle resources) {
-
-        // JAM REALTIME
+    public void initialize(URL location, ResourceBundle resources) {
         initClock();
-
-        // LOAD DATA DASHBOARD
         loadUserData();
     }
 
-    /**
-     * JAM DIGITAL REALTIME
-     */
     private void initClock() {
-
-        Locale localeID =
-                new Locale("id", "ID");
-
-        DateTimeFormatter timeFormatter =
-                DateTimeFormatter.ofPattern(
-                        "HH:mm:ss"
-                );
-
-        DateTimeFormatter dateFormatter =
-                DateTimeFormatter.ofPattern(
-                        "EEEE, dd MMMM yyyy",
-                        localeID
-                );
+        Locale localeID = new Locale("id", "ID");
+        DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss");
+        DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("EEEE, dd MMMM yyyy", localeID);
 
         Timeline clock = new Timeline(
-
                 new KeyFrame(Duration.ZERO, e -> {
-
-                    LocalDateTime now =
-                            LocalDateTime.now();
-
-                    lblJam.setText(
-                            now.format(timeFormatter)
-                    );
-
-                    lblTanggal.setText(
-                            now.format(dateFormatter)
-                    );
+                    LocalDateTime now = LocalDateTime.now();
+                    lblJam.setText(now.format(timeFormatter));
+                    lblTanggal.setText(now.format(dateFormatter));
                 }),
-
                 new KeyFrame(Duration.seconds(1))
         );
-
-        clock.setCycleCount(
-                Animation.INDEFINITE
-        );
-
+        clock.setCycleCount(Animation.INDEFINITE);
         clock.play();
     }
 
-    /**
-     * LOAD DATA AWAL DASHBOARD
-     */
     private void loadUserData() {
+        try (Connection conn = DatabaseConnection.getConnection()) {
+            LocalDate hariIni = LocalDate.now();
 
-        lblStatusDetail.setText(
-                "Belum Absen Hari Ini. Silakan Clock-In."
-        );
+            // 1. CEK STATUS PRESENSI TERBARU (SINKRON DENGAN TOMBOL)
+            String sqlStatus = "SELECT jam_masuk, jam_keluar FROM tb_presensi WHERE tanggal = ? AND id_karyawan = ?";
+            PreparedStatement pstStatus = conn.prepareStatement(sqlStatus);
+            pstStatus.setDate(1, java.sql.Date.valueOf(hariIni));
+            pstStatus.setInt(2, ID_KARYAWAN_LOGIN);
+            ResultSet rsStatus = pstStatus.executeQuery();
 
-        lblHadir.setText(
-                "0 hari"
-        );
+            if (rsStatus.next()) {
+                if (rsStatus.getString("jam_keluar") != null) {
+                    lblStatusDetail.setText("✅ Presensi Selesai. Selamat Beristirahat.");
+                    lblStatusDetail.setStyle("-fx-text-fill: #27C93F; -fx-font-weight: bold;");
+                } else {
+                    lblStatusDetail.setText("⏳ Sudah Clock-In. Jangan lupa Clock-Out nanti.");
+                    lblStatusDetail.setStyle("-fx-text-fill: #1976D2; -fx-font-weight: bold;");
+                }
+            } else {
+                lblStatusDetail.setText("Belum Absen Hari Ini. Silakan Clock-In.");
+                lblStatusDetail.setStyle("-fx-text-fill: #D32F2F; -fx-font-weight: bold;");
+            }
 
-        lblTerlambat.setText(
-                "0 kali"
-        );
+            // 2. HITUNG REKAP KEHADIRAN (Berubah jadi 1 hari setelah absen)
+            String sqlHadir = "SELECT COUNT(*) as total FROM tb_presensi WHERE id_karyawan = ? AND status_kehadiran = 'hadir'";
+            PreparedStatement pstHadir = conn.prepareStatement(sqlHadir);
+            pstHadir.setInt(1, ID_KARYAWAN_LOGIN);
+            ResultSet rsHadir = pstHadir.executeQuery();
+            if (rsHadir.next()) lblHadir.setText(rsHadir.getString("total") + " hari");
 
-        lblCuti.setText(
-                "0 hari"
-        );
+            // 3. HITUNG KETERLAMBATAN
+            String sqlTerlambat = "SELECT COUNT(*) as total FROM tb_presensi WHERE id_karyawan = ? AND status_waktu = 'terlambat'";
+            PreparedStatement pstTerlambat = conn.prepareStatement(sqlTerlambat);
+            pstTerlambat.setInt(1, ID_KARYAWAN_LOGIN);
+            ResultSet rsTerlambat = pstTerlambat.executeQuery();
+            if (rsTerlambat.next()) lblTerlambat.setText(rsTerlambat.getString("total") + " kali");
 
-        lblIzin.setText(
-                "0"
-        );
+            // 4. HITUNG CUTI
+            String sqlCuti = "SELECT COUNT(*) as total FROM tb_izin_cuti WHERE id_karyawan = ? AND jenis_izin = 'cuti' AND status_persetujuan = 'disetujui'";
+            PreparedStatement pstCuti = conn.prepareStatement(sqlCuti);
+            pstCuti.setInt(1, ID_KARYAWAN_LOGIN);
+            ResultSet rsCuti = pstCuti.executeQuery();
+            if (rsCuti.next()) lblCuti.setText(rsCuti.getString("total") + " hari");
+
+            // 5. HITUNG IZIN
+            String sqlIzin = "SELECT COUNT(*) as total FROM tb_izin_cuti WHERE id_karyawan = ? AND jenis_izin IN ('sakit', 'kepentingan lain') AND status_persetujuan = 'disetujui'";
+            PreparedStatement pstIzin = conn.prepareStatement(sqlIzin);
+            pstIzin.setInt(1, ID_KARYAWAN_LOGIN);
+            ResultSet rsIzin = pstIzin.executeQuery();
+            if (rsIzin.next()) lblIzin.setText(rsIzin.getString("total") + " hari");
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
-    /**
-     * MENERIMA USERNAME DARI LOGIN
-     */
     public void setNamaPengguna(String username) {
-
         lblNamaProfil.setText(username);
     }
 
-    // =====================================================
-    // NAVIGASI MENU
-    // =====================================================
+    @FXML private void handleMenuBeranda(ActionEvent event) {}
 
-    /**
-     * MENU BERANDA
-     */
-    @FXML
-    private void handleMenuBeranda(ActionEvent event) {
-
-        System.out.println(
-                "Anda sedang berada di Dashboard."
-        );
+    @FXML private void handleMenuPresensi(ActionEvent event) {
+        pindahHalaman(event, "presensi-view.fxml", "Manajemen Presensi - Presensi");
     }
 
-    /**
-     * MENU PRESENSI
-     */
-    @FXML
-    private void handleMenuPresensi(ActionEvent event) {
-
-        try {
-
-            FXMLLoader loader =
-                    new FXMLLoader(
-                            getClass().getResource(
-                                    "presensi-view.fxml"
-                            )
-                    );
-
-            Parent root =
-                    loader.load();
-
-            Stage stage =
-                    (Stage)((Node)event.getSource())
-                            .getScene()
-                            .getWindow();
-
-            stage.setScene(
-                    new Scene(root, 900, 600)
-            );
-
-            stage.setTitle(
-                    "Manajemen Presensi - Presensi"
-            );
-
-            stage.show();
-
-        } catch (IOException e) {
-
-            System.err.println(
-                    "Gagal membuka halaman Presensi"
-            );
-
-            e.printStackTrace();
-        }
+    @FXML private void handleMenuRiwayat(ActionEvent event) {
+        pindahHalaman(event, "riwayat-view.fxml", "Manajemen Presensi - Riwayat");
     }
 
-    /**
-     * MENU RIWAYAT
-     */
-    @FXML
-    private void handleMenuRiwayat(ActionEvent event) {
-
-        try {
-
-            FXMLLoader loader =
-                    new FXMLLoader(
-                            getClass().getResource(
-                                    "riwayat-view.fxml"
-                            )
-                    );
-
-            Parent root =
-                    loader.load();
-
-            Stage stage =
-                    (Stage)((Node)event.getSource())
-                            .getScene()
-                            .getWindow();
-
-            stage.setScene(
-                    new Scene(root, 900, 600)
-            );
-
-            stage.setTitle(
-                    "Manajemen Presensi - Riwayat"
-            );
-
-            stage.show();
-
-        } catch (IOException e) {
-
-            System.err.println(
-                    "Gagal membuka halaman Riwayat"
-            );
-
-            e.printStackTrace();
-        }
+    @FXML private void handleMenuCuti(ActionEvent event) {
+        pindahHalaman(event, "cuti-view.fxml", "Manajemen Presensi - Cuti");
     }
 
-    /**
-     * MENU CUTI / IZIN
-     */
-    @FXML
-    private void handleMenuCuti(ActionEvent event) {
-
-        try {
-
-            FXMLLoader loader =
-                    new FXMLLoader(
-                            getClass().getResource(
-                                    "cuti-view.fxml"
-                            )
-                    );
-
-            Parent root =
-                    loader.load();
-
-            Stage stage =
-                    (Stage)((Node)event.getSource())
-                            .getScene()
-                            .getWindow();
-
-            stage.setScene(
-                    new Scene(root, 900, 600)
-            );
-
-            stage.setTitle(
-                    "Manajemen Presensi - Cuti"
-            );
-
-            stage.show();
-
-        } catch (IOException e) {
-
-            System.err.println(
-                    "Gagal membuka halaman Cuti"
-            );
-
-            e.printStackTrace();
-        }
+    @FXML private void handleLogout(ActionEvent event) {
+        pindahHalaman(event, "login-view.fxml", "Manajemen Presensi - Login");
     }
 
-    /**
-     * LOGOUT
-     */
-    @FXML
-    private void handleLogout(ActionEvent event) {
-
+    private void pindahHalaman(ActionEvent event, String fxmlFile, String title) {
         try {
-
-            FXMLLoader loader =
-                    new FXMLLoader(
-                            getClass().getResource(
-                                    "login-view.fxml"
-                            )
-                    );
-
-            Parent root =
-                    loader.load();
-
-            Stage stage =
-                    (Stage)((Node)event.getSource())
-                            .getScene()
-                            .getWindow();
-
-            stage.setScene(
-                    new Scene(root, 400, 500)
-            );
-
-            stage.setTitle(
-                    "Manajemen Presensi - Login"
-            );
-
-            stage.centerOnScreen();
-
+            FXMLLoader loader = new FXMLLoader(getClass().getResource(fxmlFile));
+            Parent root = loader.load();
+            Stage stage = (Stage)((Node)event.getSource()).getScene().getWindow();
+            stage.setScene(new Scene(root, 900, 600));
+            stage.setTitle(title);
             stage.show();
-
         } catch (IOException e) {
-
-            System.err.println(
-                    "Gagal logout"
-            );
-
             e.printStackTrace();
         }
     }
